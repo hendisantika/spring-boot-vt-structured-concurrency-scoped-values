@@ -33,12 +33,17 @@ import java.util.concurrent.StructuredTaskScope;
  */
 
 /**
- * Service demonstrating Structured Concurrency (JEP 480) for parallel data fetching.
+ * Service demonstrating Structured Concurrency (JEP 505) for parallel data fetching.
  * <p>
  * Structured Concurrency ensures that:
  * 1. All subtasks complete before the parent task completes
  * 2. If any subtask fails, all other subtasks are cancelled
  * 3. ScopedValues are automatically inherited by child threads
+ * <p>
+ * JDK 25 API Changes:
+ * - StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+ * - join() now throws FailedException if any subtask fails (no separate throwIfFailed())
+ * - Joiner API provides flexible composition policies
  */
 @Slf4j
 @Service
@@ -54,7 +59,7 @@ public class CustomerService {
      * Multiple data sources are queried in parallel using virtual threads.
      * <p>
      * This demonstrates:
-     * - StructuredTaskScope.ShutdownOnFailure for fail-fast behavior
+     * - StructuredTaskScope.open() for fail-fast behavior (JDK 25 API)
      * - Automatic ScopedValue propagation to subtasks
      * - Virtual thread creation for I/O-bound operations
      */
@@ -69,8 +74,9 @@ public class CustomerService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
-        // Use Structured Concurrency to fetch related data in parallel
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // Use Structured Concurrency to fetch related data in parallel (JDK 25 API)
+        // StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+        try (var scope = StructuredTaskScope.open()) {
 
             // Each fork creates a new virtual thread that inherits ScopedValues
             var recentOrdersTask = scope.fork(() -> {
@@ -91,9 +97,8 @@ public class CustomerService {
                 return getProductRecommendations(customerId);
             });
 
-            // Wait for all tasks to complete or fail
+            // Wait for all tasks to complete - join() throws FailedException if any subtask fails (JDK 25)
             scope.join();
-            scope.throwIfFailed();
 
             // All tasks completed successfully - build the dashboard
             long fetchTimeMs = System.currentTimeMillis() - startTime;

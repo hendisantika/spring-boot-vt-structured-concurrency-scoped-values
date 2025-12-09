@@ -27,7 +27,7 @@ import java.util.UUID;
 /**
  * Filter that establishes ScopedValue bindings for each HTTP request.
  * <p>
- * This filter runs early in the filter chain and uses ScopedValue.runWhere()
+ * This filter runs early in the filter chain and uses ScopedValue.where().run()
  * to bind the RequestContext for the duration of the request. All code
  * executing within the request (including virtual threads spawned via
  * StructuredTaskScope) will have access to this context.
@@ -54,9 +54,9 @@ public class RequestContextFilter implements Filter {
         log.debug("Binding RequestContext for request: {} [correlationId={}]",
                 context.requestId(), context.correlationId());
 
-        // Use ScopedValue.runWhere() to bind the context for the duration of the request
+        // Use ScopedValue.where().run() to bind the context for the duration of the request (JDK 25 API)
         try {
-            ScopedValue.runWhere(ScopedValues.REQUEST_CONTEXT, context, () -> {
+            ScopedValue.where(ScopedValues.REQUEST_CONTEXT, context).run(() -> {
                 try {
                     filterChain.doFilter(servletRequest, servletResponse);
                 } catch (IOException | ServletException e) {

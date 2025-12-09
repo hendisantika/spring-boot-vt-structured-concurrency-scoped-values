@@ -56,7 +56,7 @@ public class DemoController {
     }
 
     /**
-     * Demonstrates ScopedValue propagation across virtual threads in Structured Concurrency.
+     * Demonstrates ScopedValue propagation across virtual threads in Structured Concurrency (JDK 25 API).
      */
     @GetMapping("/scoped-value-demo")
     public ResponseEntity<Map<String, Object>> scopedValueDemo() {
@@ -72,7 +72,8 @@ public class DemoController {
         result.put("parentIsVirtual", parentIsVirtual);
         result.put("parentRequestId", parentContext.requestId());
 
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // JDK 25 API: StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+        try (var scope = StructuredTaskScope.open()) {
 
             // Fork multiple tasks - each will inherit the ScopedValue
             var task1 = scope.fork(() -> {
@@ -120,8 +121,8 @@ public class DemoController {
                 );
             });
 
+            // join() throws FailedException if any subtask fails (JDK 25)
             scope.join();
-            scope.throwIfFailed();
 
             result.put("childTasks", java.util.List.of(task1.get(), task2.get(), task3.get()));
             result.put("message", "All child tasks inherited the same requestId via ScopedValue!");
@@ -135,7 +136,7 @@ public class DemoController {
     }
 
     /**
-     * Demonstrates parallel processing with different completion times.
+     * Demonstrates parallel processing with different completion times (JDK 25 API).
      */
     @GetMapping("/parallel-processing")
     public ResponseEntity<Map<String, Object>> parallelProcessingDemo() {
@@ -146,7 +147,8 @@ public class DemoController {
 
         Map<String, Object> result = new HashMap<>();
 
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // JDK 25 API: StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+        try (var scope = StructuredTaskScope.open()) {
 
             var fastTask = scope.fork(() -> {
                 Thread.sleep(50);
@@ -163,8 +165,8 @@ public class DemoController {
                 return Map.of("task", "slow", "duration", 200, "thread", Thread.currentThread().getName());
             });
 
+            // join() throws FailedException if any subtask fails (JDK 25)
             scope.join();
-            scope.throwIfFailed();
 
             long totalTime = System.currentTimeMillis() - startTime;
 

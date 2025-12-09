@@ -36,12 +36,16 @@ import java.util.concurrent.StructuredTaskScope;
  */
 
 /**
- * Order service demonstrating Structured Concurrency with ShutdownOnSuccess policy.
+ * Order service demonstrating Structured Concurrency with JDK 25 API.
  * <p>
  * This demonstrates:
- * - StructuredTaskScope.ShutdownOnSuccess for "first wins" scenarios
+ * - StructuredTaskScope.open() for parallel validation
  * - Parallel validation using virtual threads
  * - ScopedValue access within subtasks
+ * <p>
+ * JDK 25 API Changes:
+ * - StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+ * - join() now throws FailedException if any subtask fails
  */
 @Slf4j
 @Service
@@ -108,20 +112,20 @@ public class OrderService {
     }
 
     /**
-     * Validates all order items in parallel using Structured Concurrency.
+     * Validates all order items in parallel using Structured Concurrency (JDK 25 API).
      * All validations must succeed, otherwise the entire operation fails.
      */
     private List<ValidatedItem> validateItemsInParallel(List<OrderRequest.OrderItemRequest> items) {
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // JDK 25 API: StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+        try (var scope = StructuredTaskScope.open()) {
 
             // Fork a validation task for each item
             List<StructuredTaskScope.Subtask<ValidatedItem>> tasks = items.stream()
                     .map(item -> scope.fork(() -> validateItem(item)))
                     .toList();
 
-            // Wait for all validations to complete
+            // Wait for all validations to complete - join() throws FailedException on failure (JDK 25)
             scope.join();
-            scope.throwIfFailed();
 
             // Collect results
             return tasks.stream()

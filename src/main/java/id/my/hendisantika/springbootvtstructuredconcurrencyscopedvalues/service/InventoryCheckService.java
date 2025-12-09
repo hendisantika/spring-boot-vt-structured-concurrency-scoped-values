@@ -24,15 +24,21 @@ import java.util.concurrent.StructuredTaskScope;
  */
 
 /**
- * Service demonstrating StructuredTaskScope.ShutdownOnSuccess pattern.
+ * Service demonstrating JDK 25 Structured Concurrency patterns.
  * <p>
- * ShutdownOnSuccess is useful for "race" scenarios where you want the first
- * successful result and can cancel the remaining tasks.
+ * Demonstrates two patterns:
+ * 1. Joiner.anySuccessfulResultOrThrow() - "race" scenarios where first success wins
+ * 2. StructuredTaskScope.open() - all tasks must complete successfully
  * <p>
  * Use cases:
  * - Querying multiple data sources and using the first response
  * - Finding any available inventory from multiple warehouses
  * - Redundant service calls for fault tolerance
+ * <p>
+ * JDK 25 API Changes:
+ * - StructuredTaskScope.open(Joiner.anySuccessfulResultOrThrow()) replaces ShutdownOnSuccess
+ * - StructuredTaskScope.open() replaces ShutdownOnFailure
+ * - join() returns the result directly (no separate result() method)
  */
 @Slf4j
 @Service
@@ -45,8 +51,8 @@ public class InventoryCheckService {
      * Checks inventory across multiple simulated "warehouses" in parallel.
      * Returns as soon as any warehouse reports sufficient stock.
      * <p>
-     * This demonstrates ShutdownOnSuccess - the first warehouse to confirm
-     * stock availability wins, and other checks are cancelled.
+     * This demonstrates JDK 25's Joiner.anySuccessfulResultOrThrow() - the first warehouse
+     * to confirm stock availability wins, and other checks are cancelled.
      */
     @Transactional(readOnly = true)
     public InventoryResult findAvailableInventory(Long productId, int requiredQuantity) {
@@ -57,17 +63,18 @@ public class InventoryCheckService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
 
-        try (var scope = new StructuredTaskScope.ShutdownOnSuccess<InventoryResult>()) {
+        // JDK 25 API: Joiner.anySuccessfulResultOrThrow() replaces ShutdownOnSuccess
+        // join() returns the first successful result directly
+        try (var scope = StructuredTaskScope.open(
+                StructuredTaskScope.Joiner.<InventoryResult>anySuccessfulResultOrThrow())) {
 
             // Simulate checking multiple warehouses in parallel
             scope.fork(() -> checkWarehouse("WAREHOUSE-EAST", product, requiredQuantity, 100));
             scope.fork(() -> checkWarehouse("WAREHOUSE-WEST", product, requiredQuantity, 150));
             scope.fork(() -> checkWarehouse("WAREHOUSE-CENTRAL", product, requiredQuantity, 75));
 
-            scope.join();
-
-            // Get the first successful result
-            InventoryResult result = scope.result();
+            // join() returns the first successful result (JDK 25 API)
+            InventoryResult result = scope.join();
             log.info("Found inventory at {} for product {} [requestId={}]",
                     result.warehouseId(), productId, requestId);
             return result;
@@ -127,8 +134,8 @@ public class InventoryCheckService {
     }
 
     /**
-     * Aggregates inventory data from all warehouses using ShutdownOnFailure.
-     * This demonstrates when you need ALL results vs just the first one.
+     * Aggregates inventory data from all warehouses using StructuredTaskScope.open().
+     * This demonstrates when you need ALL results vs just the first one (JDK 25 API).
      */
     @Transactional(readOnly = true)
     public AggregatedInventory getAggregatedInventory(Long productId) {
@@ -138,14 +145,15 @@ public class InventoryCheckService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
 
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // JDK 25 API: StructuredTaskScope.open() replaces new StructuredTaskScope.ShutdownOnFailure()
+        try (var scope = StructuredTaskScope.open()) {
 
             var eastTask = scope.fork(() -> getWarehouseInfo("WAREHOUSE-EAST", product, 50));
             var westTask = scope.fork(() -> getWarehouseInfo("WAREHOUSE-WEST", product, 75));
             var centralTask = scope.fork(() -> getWarehouseInfo("WAREHOUSE-CENTRAL", product, 60));
 
+            // join() throws FailedException if any subtask fails (JDK 25)
             scope.join();
-            scope.throwIfFailed();
 
             List<WarehouseInfo> warehouses = List.of(
                     eastTask.get(),
