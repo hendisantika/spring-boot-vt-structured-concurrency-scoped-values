@@ -10,13 +10,19 @@ A comprehensive demonstration of JDK 25's modern concurrency features with Sprin
 - Tomcat handles all HTTP requests on virtual threads
 - Lightweight threads ideal for I/O-bound operations
 
-### 2. Structured Concurrency (JEP 480)
+### 2. Structured Concurrency (JEP 505)
 
-- **ShutdownOnFailure**: All subtasks must succeed, fails fast on first error
-- **ShutdownOnSuccess**: First successful result wins, cancels remaining tasks
+JDK 25 introduces a redesigned API with the Joiner pattern:
+
+- **StructuredTaskScope.open()**: Default scope - all subtasks must succeed, fails fast on first error
+- **Joiner.anySuccessfulResultOrThrow()**: First successful result wins, cancels remaining tasks
+- **Joiner.allSuccessfulOrThrow()**: Collects all successful results as a stream
+- `join()` now returns results directly and throws on failure (no separate `throwIfFailed()`)
 - Automatic cleanup of child threads when parent completes
 
 ### 3. Scoped Values (JEP 481)
+
+JDK 25 API uses `ScopedValue.where().run()` pattern:
 
 - Request context automatically propagated to child threads
 - Immutable, inherited values across virtual thread hierarchies
@@ -36,13 +42,13 @@ src/main/java/id/my/hendisantika/springbootvtstructuredconcurrencyscopedvalues/
 ├── config/
 │   ├── DataInitializer.java        # Sample data loader
 │   ├── GlobalExceptionHandler.java # Exception handling
-│   └── RequestContextFilter.java   # ScopedValue binding filter
+│   └── RequestContextFilter.java   # ScopedValue binding filter (JDK 25 API)
 ├── context/
 │   ├── RequestContext.java         # Request context record
 │   └── ScopedValues.java           # ScopedValue definitions
 ├── controller/
 │   ├── CustomerController.java
-│   ├── DemoController.java         # Feature demonstration endpoints
+│   ├── DemoController.java         # Feature demonstration endpoints (JDK 25 API)
 │   ├── OrderController.java
 │   └── ProductController.java
 ├── dto/
@@ -60,8 +66,8 @@ src/main/java/id/my/hendisantika/springbootvtstructuredconcurrencyscopedvalues/
 │   ├── OrderRepository.java
 │   └── ProductRepository.java
 └── service/
-    ├── CustomerService.java        # Structured Concurrency example
-    ├── InventoryCheckService.java  # ShutdownOnSuccess example
+    ├── CustomerService.java        # StructuredTaskScope.open() example
+    ├── InventoryCheckService.java  # Joiner.anySuccessfulResultOrThrow() example
     ├── OrderService.java           # Parallel validation example
     └── ProductService.java
 ```
@@ -196,60 +202,48 @@ Validates all items in parallel using virtual threads.
 
 ## Key Code Examples
 
-### Structured Concurrency with ShutdownOnFailure
+### Structured Concurrency with StructuredTaskScope.open() (JDK 25)
 
 ```java
-try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+// Default scope: all tasks must succeed (replaces ShutdownOnFailure)
+try (var scope = StructuredTaskScope.open()) {
     var task1 = scope.fork(() -> fetchOrders(customerId));
     var task2 = scope.fork(() -> calculateStats(customerId));
     var task3 = scope.fork(() -> getRecommendations(customerId));
 
-    scope.join();           // Wait for all tasks
-    scope.throwIfFailed();  // Propagate any exceptions
+    scope.join();  // Waits for all tasks, throws FailedException on failure
 
     return new Dashboard(task1.get(), task2.get(), task3.get());
 }
 ```
 
-### ScopedValue Declaration and Usage
+### ScopedValue Declaration and Usage (JDK 25)
 
 ```java
 // Declaration
 public static final ScopedValue<RequestContext> REQUEST_CONTEXT = ScopedValue.newInstance();
 
-// Binding (in filter)
-ScopedValue.runWhere(REQUEST_CONTEXT, context, () -> filterChain.doFilter(...));
+// Binding (in filter) - JDK 25 uses where().run()
+ScopedValue.where(REQUEST_CONTEXT, context).run(() -> {
+    filterChain.doFilter(request, response);
+});
 
 // Access (anywhere in the call stack)
 RequestContext ctx = ScopedValues.REQUEST_CONTEXT.get();
 ```
 
-### ShutdownOnSuccess (First Wins)
+### First Wins with Joiner.anySuccessfulResultOrThrow() (JDK 25)
 
 ```java
-try(var scope = new StructuredTaskScope.ShutdownOnSuccess<Result>()){
-        scope.
+// Replaces ShutdownOnSuccess - first successful result wins
+try (var scope = StructuredTaskScope.open(
+        StructuredTaskScope.Joiner.<Result>anySuccessfulResultOrThrow())) {
 
-fork(() ->
+    scope.fork(() -> checkWarehouse("EAST", productId));
+    scope.fork(() -> checkWarehouse("WEST", productId));
+    scope.fork(() -> checkWarehouse("CENTRAL", productId));
 
-checkWarehouse("EAST",productId));
-        scope.
-
-fork(() ->
-
-checkWarehouse("WEST",productId));
-        scope.
-
-fork(() ->
-
-checkWarehouse("CENTRAL",productId));
-
-        scope.
-
-join();
-    return scope.
-
-result();  // First successful result
+    return scope.join();  // Returns first successful result directly
 }
 ```
 
