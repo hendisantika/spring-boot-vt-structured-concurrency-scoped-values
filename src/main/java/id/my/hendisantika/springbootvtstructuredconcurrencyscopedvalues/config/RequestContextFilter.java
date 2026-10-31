@@ -33,7 +33,7 @@ import java.util.UUID;
  * StructuredTaskScope) will have access to this context.
  */
 @Slf4j
-@Component
+@Component("scopedValueRequestContextFilter")
 @Order(1)
 public class RequestContextFilter implements Filter {
 
