@@ -307,6 +307,7 @@ The [`Java CI with Maven`](.github/workflows/maven.yml) workflow runs on every p
 - Runs `./mvnw -B -ntp verify` (compile with `--enable-preview`, tests on H2, package)
 - Uploads Surefire reports as an artifact when the build fails
 - On pushes to `main`, submits the Maven dependency graph to GitHub for better Dependabot alerts
+  (non-blocking; enable **Settings → Code security → Dependency graph** for it to take effect)
 - Uses least-privilege `permissions`, cancels superseded runs, and has a job timeout
 
 ## Dependency Updates (Dependabot)
@@ -315,9 +316,9 @@ The [`Java CI with Maven`](.github/workflows/maven.yml) workflow runs on every p
 
 | Ecosystem        | Schedule (Asia/Jakarta) | Grouping                                                      | Commit prefix                  |
 |------------------|-------------------------|---------------------------------------------------------------|--------------------------------|
-| `maven`          | Daily, 05:00            | `spring`, `test` and `maven-minor-patch` (majors stay single) | `build(deps)`/`build(deps-dev)` |
+| `maven`          | Daily, 05:00            | `spring`, `test` and `maven-minor-patch` (majors stay single) | `build(deps)` / `build(deps-dev)` |
 | `github-actions` | Weekly (Mon), 05:00     | All actions in one PR                                         | `ci(deps)`                     |
-| `docker-compose` | Weekly (Mon), 05:00     | MySQL image in `compose.yaml`                                 | `build(docker)`                |
+| `docker-compose` | Weekly (Mon), 05:00     | MySQL image in `compose.yaml`                                 | `build(deps)`                  |
 
 ## Troubleshooting
 
